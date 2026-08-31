@@ -287,7 +287,7 @@ async def update_project_settings(
 
         if not result.data:
             raise HTTPException(
-                status_code=422, 
+                status_code=404, 
                 detail="Failed to update project settings - invalid data provided"
             )
 
