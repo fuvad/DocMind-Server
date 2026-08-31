@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import os
-from routers import users
+from routers import users, projects
 
 load_dotenv()
 
@@ -24,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(users.router)
+app.include_router(projects.router) 
 
 @app.get("/")
 async def root():
