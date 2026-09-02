@@ -13,6 +13,32 @@ celery_app = Celery(
     backend="redis://localhost:6379/0"    # Where result will be stored
 )
 
+
+def update_status(document_id: str, status: str, details: dict = None):
+    """ Update document processing status with optional details """
+
+    # Get current document 
+    result = supabase.table("project_documents").select("processing_details").eq("id", document_id).execute()
+
+    # Start with existing details or empty dict
+    current_details = {}
+
+    if result.data and result.data[0]["processing_details"]:
+        current_details = result.data[0]["processing_details"]
+
+    
+    # Add new details if provided
+    if details: 
+        current_details.update(details)
+    
+
+    # Update document 
+    supabase.table("project_documents").update({
+        "processing_status": status, 
+        "processing_details": current_details
+    }).eq("id", document_id).execute()
+    
+
 @celery_app.task
 def process_document(document_id: str):
     """
@@ -25,6 +51,7 @@ def process_document(document_id: str):
         document = doc_result.data[0]
 
         # step 1: Download and partition 
+        update_status(document_id, "partitioning")
         elements = download_and_partition(document_id, document)
 
         tables = sum(1 for e in elements if e.category == "Table")
@@ -73,8 +100,14 @@ def download_and_partition(document_id: str, document: dict):
         s3_client.download_file(BUCKET_NAME, s3_key, temp_file)
 
         elements = partition_document(temp_file, file_type, source_type="file")
+        
+    elements_summary = analyze_elements(elements)
 
-
+    update_status(document_id, "chunking", {
+        "partitioning": {
+            "elements_found": elements_summary
+        }
+    })
     os.remove(temp_file)    # after partitioning temp_file is not needed
 
     return elements
@@ -94,4 +127,38 @@ def partition_document(temp_file: str, file_type: str, source_type: str = "file"
             extract_image_block_types=["Image"], # Grab images found in the PDF
             extract_image_block_to_payload=True # Store images as base64 data you can actually use
         )
+        
+
+def analyze_elements(elements):
+    """ Count different types of elements found in the document """
+
+    text_count = 0
+    table_count = 0
+    image_count = 0
+    title_count = 0
+    other_count = 0
+
+    # Go through each element and count what type it is 
+    for element in elements: 
+        element_name = type(element).__name__    #Get the class name like "Table" or "NarrativeText"
+
+        if element_name == "Table":
+            table_count += 1
+        elif element_name == "Image": 
+            image_count += 1
+        elif element_name in ["Title", "Header"]:
+            title_count += 1
+        elif element_name in ["NarrativeText", "Text", "ListItem", "FigureCaption"]:
+            text_count += 1
+        else:
+            other_count += 1
+
+    # Return a simple dictionary
+    return {
+        "text": text_count,
+        "tables": table_count,
+        "images": image_count,
+        "titles": title_count,
+        "other": other_count
+    }
 
