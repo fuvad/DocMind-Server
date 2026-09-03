@@ -3,11 +3,18 @@ from pydantic import BaseModel
 from database import supabase
 from auth import get_current_user
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from typing import List, Dict
 
 
 # Initialize LLM for Summarization
 llm = ChatOpenAI(model='gpt-4o-mini', temperature=0)
+
+# Initialize Embedding model
+embeddings_model = OpenAIEmbeddings(
+    model="text-embedding-3-small",
+    dimensions=1536
+)
 
 router = APIRouter(
     tags=["chats"]
@@ -86,7 +93,43 @@ async def get_chat(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get chat: {str(e)}")
+  
+
+def load_project_settings(project_id: str) -> dict:
+    """Load project settings from database"""
+    print(f"⚙️ Fetching project settings...")
+    settings_result = supabase.table('project_settings').select('*').eq('project_id', project_id).execute()
     
+    if not settings_result.data:
+        raise HTTPException(status_code=404, detail="Project settings not found")
+    
+    settings = settings_result.data[0]
+    print(f"✅ Settings retrieved")
+    return settings
+
+def get_document_ids(project_id: str) -> List[str]:
+    """Get all document IDs for a project"""
+    print(f"📄 Fetching project documents...")
+    documents_result = supabase.table('project_documents').select('id').eq('project_id', project_id).execute()
+    
+    # List of doc ids
+    document_ids = [doc['id'] for doc in documents_result.data]
+    print(f"✅ Found {len(document_ids)} documents")
+    return document_ids  
+
+def vector_search(query: str, document_ids: List[str], settings: dict) -> List[Dict]:
+    """Execute vector search"""
+    query_embedding = embeddings_model.embed_query(query)
+    
+    # Invoke Postgres function
+    result = supabase.rpc('vector_search_document_chunks', {
+        'query_embedding': query_embedding,
+        'filter_document_ids': document_ids,
+        'match_threshold': settings['similarity_threshold'],
+        'chunks_per_search': settings['chunks_per_search']
+    }).execute()
+    
+    return result.data if result.data else []
 
 class SendMessageRequest(BaseModel):
     content: str
@@ -94,6 +137,7 @@ class SendMessageRequest(BaseModel):
 @router.post("/api/projects/{project_id}/chats/{chat_id}/messages")
 async def send_message(
     chat_id: str,
+    project_id: str,
     request: SendMessageRequest,    # Content from frontend
     clerk_id: str = Depends(get_current_user)
 ):
@@ -116,21 +160,39 @@ async def send_message(
         
         user_message = user_message_result.data[0]
         print(f"✅ User message saved: {user_message['id']}")
+
+        # 2. Load project settings
+        # We need settings to know: chunk size, similarity threshold, etc.
+        settings = load_project_settings(project_id)
         
-        # 2. Call LLM with system prompt + user message
-        print(f"🤖 Calling LLM...")
-        messages = [
-            SystemMessage(content="You are a helpful AI assistant. Provide clear, concise, and accurate responses."),
-            HumanMessage(content=message)
-        ]
+        # 3. Get document IDs for this project
+        # This narrows our search scope to only documents uploaded to this specific project
+        document_ids = get_document_ids(project_id)
+
         
-        response = llm.invoke(messages)
-        ai_response = response.content
+        # 4. Generate query embedding
+        # Convert the user's text question into a vector so we can perform similarity search
+        # It's being done inside the function of 5th step
+
+        # 5. Perform vector search using the RPC function
+        # Search through the chunks to find the most relevant chunks for answering the question
+        chunks = vector_search(message, document_ids, settings)     # List of chunks
+        print(f"✅ Retrieved {len(chunks)} relevant chunks from vector search")
         
-        print(f"✅ LLM response received: {len(ai_response)} chars")
+        # 6. Build context from retrieved chunks
+        # Format the retrieved chunks into a structured context with citations
         
-        # 3. Save AI message
+        # 7. Build system prompt with injected context
+        # Add the retrieved document context to the system prompt so the LLM can answer based on the documents
+        
+        # 8. Call LLM & get response
+        # The LLM now has access to relevant document chunks and can provide informed answers
+        
+        # 9. Save AI message with citations to database
+        # Store the AI's response along with citations
+
         print(f"💾 Saving AI message...")
+        ai_response = "This is a test response from the AI assistant."
         ai_message_result = supabase.table('messages').insert({
             "chat_id": chat_id,
             "content": ai_response,
@@ -142,7 +204,7 @@ async def send_message(
         ai_message = ai_message_result.data[0]
         print(f"✅ AI message saved: {ai_message['id']}")
         
-        # 4. Return data
+        # 10. Return data
         return {
             "message": "Messages sent successfully",
             "data": {
@@ -154,3 +216,4 @@ async def send_message(
     except Exception as e:
         print(f"❌ Error in send_message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
