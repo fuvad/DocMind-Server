@@ -229,4 +229,41 @@ async def delete_file(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+    
+    
+@router.get("/api/projects/{project_id}/files/{file_id}/chunks")
+async def get_document_chunks(
+    project_id: str,
+    file_id: str,
+    clerk_id: str = Depends(get_current_user)
+):
+    """"
+    Get all the chunks related to one particular document
+    """
+    try:
+        
+        # Verify whether the project is valid
+        project_result = supabase.table('projects').select('id').eq('id', project_id).eq('clerk_id', clerk_id).execute()
+        
+        if not project_result.data:
+            raise HTTPException(status_code=404, detail="Project not found or access denied")
+        
+        # Checks whether the document is present or not
+        doc_result = supabase.table('project_documents').select('id').eq('id', file_id).eq('project_id', project_id).execute()
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get all the chunk items associated with this document
+        chunks_result = supabase.table('document_chunks').select('*').eq('document_id', file_id).order('chunk_index').execute()
+        
+        return {
+            "message": "Document chunks retrieved successfully",
+            "data": chunks_result.data or []
+        }
+
+    except Exception as e:
+        print(f"ERROR getting chunks: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get document chunks: {str(e)}")
+
 

@@ -7,11 +7,20 @@ from unstructured.partition.html import partition_html
 from unstructured.chunking.title import chunk_by_title
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from scrapingbee import ScrapingBeeClient
 import os
 
 
+scrapingbee_client = ScrapingBeeClient(api_key=os.getenv('SCRAPINGBEE_API_KEY'))
+
 # Initialize LLM for Summarization
-llm = ChatOpenAI(model='gpt-4o-min', temperature=0)
+llm = ChatOpenAI(model='gpt-4o-mini', temperature=0)
+
+# Initialize Embedding model
+embeddings_model = OpenAIEmbeddings(
+    model="text-embedding-3-small",
+    dimensions=1536
+)
 
 # Create Celery App
 celery_app = Celery(
@@ -74,8 +83,12 @@ def process_document(document_id: str):
         processed_chunks = summarise_chunks(chunks, document_id, source_type)
 
         #4 Step 4: Vectorization & storing 
+        update_status(document_id, 'vectorization')
+        stored_chunk_ids = store_chunks_with_embeddings(document_id, processed_chunks)
         
-    
+        # Mark as completed
+        update_status(document_id, 'completed')
+        print(f"✅ Celery task completed for document: {document_id} with {len(stored_chunk_ids)} chunks")
 
         return {
             "status": "success", 
@@ -94,7 +107,17 @@ def download_and_partition(document_id: str, document: dict):
 
     if source_type == "url":
         # Crawl URL 
-        pass
+        url = document["source_url"] 
+        
+        # Fetch content with ScrapingBee
+        response = scrapingbee_client.get(url)
+        
+        # Save to temp file (html)
+        temp_file = f"/tmp/{document_id}.html"
+        with open(temp_file, 'wb') as f:
+            f.write(response.content)
+        
+        elements = partition_document(temp_file, "html", source_type="url")
 
     else:
         # Handle file processing
@@ -126,7 +149,9 @@ def partition_document(temp_file: str, file_type: str, source_type: str = "file"
     """ Partition document based on file type and source type """
 
     if source_type == "url": 
-        pass
+        return partition_html(
+            filename=temp_file
+        )
 
     if file_type == "pdf":
         return partition_pdf(
@@ -362,3 +387,48 @@ def get_page_number(chunk, chunk_index):
     
     # Fallback: use chunk index as page number
     return chunk_index + 1
+
+
+def store_chunks_with_embeddings(document_id: str, processed_chunks: list):
+    """Generate embeddings and store chunks in one efficient operation"""
+    print("Generating embeddings and storing chunks...")
+    
+    if not processed_chunks:
+        print(" No chunks to process")
+        return []
+    
+    # Step 1: Generate embeddings for all chunks
+    print(f"Generating embeddings for {len(processed_chunks)} chunks...")
+    
+    # Extract content for embedding generation (summarized contents alone)
+    texts = [chunk_data['content'] for chunk_data in processed_chunks]
+    
+    # Generate embeddings in batches to avoid API limits
+    batch_size = 10
+    all_embeddings = []
+    
+    # Loop through summarized chunks with interval of batch_size
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i + batch_size]    # extract 0-9 elements as a list
+        batch_embeddings = embeddings_model.embed_documents(batch_texts)   # pass those elements to the embedding model
+        all_embeddings.extend(batch_embeddings)   # Add those embeddings to all_embeddings
+        print(f" ✅ Generated embeddings for batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}")
+    
+    # Step 2: Store chunks with embeddings in db
+    print("Storing chunks with embeddings in database...")
+    stored_chunk_ids = []
+    
+    for i, (chunk_data, embedding) in enumerate(zip(processed_chunks, all_embeddings)):
+        # Add document_id, chunk_index, and embedding
+        chunk_data_with_embedding = {
+            **chunk_data,
+            'document_id': document_id,
+            'chunk_index': i,
+            'embedding': embedding
+        }
+        
+        result = supabase.table('document_chunks').insert(chunk_data_with_embedding).execute()
+        stored_chunk_ids.append(result.data[0]['id'])
+    
+    print(f"Successfully stored {len(processed_chunks)} chunks with embeddings")
+    return stored_chunk_ids
