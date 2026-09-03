@@ -4,6 +4,9 @@ import time
 from unstructured.partition.pdf import partition_pdf
 from unstructured.partition.docx import partition_docx
 from unstructured.partition.html import partition_html
+from unstructured.partition.pptx import partition_pptx
+from unstructured.partition.text import partition_text
+from unstructured.partition.md import partition_md
 from unstructured.chunking.title import chunk_by_title
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -110,7 +113,7 @@ def download_and_partition(document_id: str, document: dict):
         url = document["source_url"] 
         
         # Fetch content with ScrapingBee
-        response = scrapingbee_client.get(url)
+        response = scrapingbee_client.html_api(url, method='GET')
         
         # Save to temp file (html)
         temp_file = f"/tmp/{document_id}.html"
@@ -153,13 +156,38 @@ def partition_document(temp_file: str, file_type: str, source_type: str = "file"
             filename=temp_file
         )
 
-    if file_type == "pdf":
+    elif file_type == "pdf":
         return partition_pdf(
             filename=temp_file,  # Path to your PDF file
             strategy="hi_res", # Use the most accurate (but slower) processing method of extraction
             infer_table_structure=True, # Keep tables as structured HTML, not jumbled text
             extract_image_block_types=["Image"], # Grab images found in the PDF
             extract_image_block_to_payload=True # Store images as base64 data you can actually use
+        )
+    
+    # We can add images for docx and pptx if we want    
+    elif file_type == 'docx':
+        return partition_docx(
+            filename=temp_file,
+            strategy="hi_res",
+            infer_table_structure=True
+        )
+
+    elif file_type == 'pptx':
+        return partition_pptx(
+            filename=temp_file,
+            strategy="hi_res",
+            infer_table_structure=True, 
+        )
+
+    elif file_type == "txt":
+        return partition_text(
+            filename=temp_file
+        )
+    
+    elif file_type == "md":
+        return partition_md(
+            filename=temp_file
         )
         
 
