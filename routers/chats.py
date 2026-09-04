@@ -183,6 +183,27 @@ def hybrid_search(query: str, document_ids: List[str], settings: dict) -> List[D
         [vector_results, keyword_results], 
         [settings['vector_weight'], settings['keyword_weight']]
     )
+    
+    
+class QueryVariations(BaseModel):
+    queries: List[str]
+    
+def generate_query_variations(original_query: str, num_queries: int = 3) -> List[str]:
+    """Generate query variations using LLM"""
+    system_prompt = f"""Generate {num_queries-1} alternative ways to phrase this question for document search. Use different keywords and synonyms while maintaining the same intent. Return exactly {num_queries-1} variations."""
+
+    try:
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"Original query: {original_query}")
+        ]
+        
+        structured_llm = llm.with_structured_output(QueryVariations)
+        result = structured_llm.invoke(messages)
+        
+        return [original_query] + result.queries[:num_queries-1]
+    except Exception:
+        return [original_query]
 
 
 def keyword_search(query: str, document_ids: List[str], settings: dict) -> List[Dict]:
@@ -457,8 +478,48 @@ async def send_message(
             print("📈 Executing: Hybrid Search (Vector + Keyword)") 
             chunks = hybrid_search(message, document_ids, settings)
             print(f"📈 Hybrid search returned: {len(chunks)} chunks")
+            
+        elif strategy == "multi-query-vector":
+            print(f"📈 Executing: Multi-Query Vector Search ({settings['number_of_queries']} queries)")
+            queries = generate_query_variations(message, settings['number_of_queries'])
+            print(f"🔄 Generated queries: {queries}")
+            
+            all_results = []
+            
+            # For each and every single query we'll have to do vector search
+            for i, q in enumerate(queries):
+                results = vector_search(q, document_ids, settings)    # List of chunks for every query
+                print(f"📈 Query {i+1} '{q}' returned: {len(results)} chunks")
+                all_results.append(results)
+            chunks = rrf_rank_and_fuse(all_results)
+            print(f"🔗 RRF fusion returned: {len(chunks)} chunks")
+            
+        elif strategy == 'multi-query-hybrid':
+            print(f"📈 Executing: Multi-Query Hybrid Search ({settings['number_of_queries']} queries, Vector + Keyword)")
+            queries = generate_query_variations(message, settings['number_of_queries'])
+            print(f"🔄 Generated queries: {queries}")
+            
+            # Stage 1: Per-query hybrid fusion
+            all_hybrid_results = []
+            
+            for i, q in enumerate(queries):
+                print(f"\n  Query {i+1}: '{q}'")
+                
+                # Use the existing hybrid_search function which handles weights
+                hybrid_results = hybrid_search(q, document_ids, settings)
+                print(f"Hybrid fusion returned: {len(hybrid_results)} chunks")
+                all_hybrid_results.append(hybrid_results)
+            
+            # Stage 2: Cross-query fusion (equal weights across queries by default)
+            print(f"\nFinal RRF fusion across {len(all_hybrid_results)} queries")
+            chunks = rrf_rank_and_fuse(all_hybrid_results)
+            print(f"📊 Final result: {len(chunks)} chunks")
         
-        # 5. Build context from retrieved chunks
+        # 5. Trim to final context size
+        chunks = chunks[:settings['final_context_size']]
+        print(f"Trimmed to final context size: {len(chunks)} chunks")
+        
+        # 6. Build context from retrieved chunks
         # Format the retrieved chunks into a structured context with citations
         texts, images, tables, citations = build_context(chunks)
         validate_context(texts, images, tables, citations)
