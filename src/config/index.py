@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-if not os.getenv("SUPABASE_API_URL") or not os.getenv("SUPABASE_SECRET_KEY"):
+if not os.getenv("SUPABASE_API_URL") or not os.getenv("SUPABASE_SERVICE_KEY"):
     raise ValueError(
-        "SUPABASE_API_URL and SUPABASE_SECRET_KEY must be set in .env file"
+        "SUPABASE_API_URL and SUPABASE_SERVICE_KEY must be set in .env file"
     )
 
 if not os.getenv("CLERK_SECRET_KEY") or not os.getenv("DOMAIN"):
