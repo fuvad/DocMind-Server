@@ -21,7 +21,9 @@ dependencies = [
     "unstructured[all-docs] (==0.18.11)",
     "scrapingbee (>=2.2.0,<3.0.0)",
     "ipykernel (>=7.3.0,<8.0.0)",
-    "langgraph (>=1.2.11,<2.0.0)"
+    "langgraph (>=1.2.11,<2.0.0)",
+    "ddgs (>=9.16.0,<10.0.0)",
+    "langchain-tavily (>=0.2.18,<0.3.0)"
 ]
 
 

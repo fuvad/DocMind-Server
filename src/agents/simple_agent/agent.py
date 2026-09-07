@@ -341,7 +341,7 @@ def create_simple_rag_agent(
     
     Args:
         project_id: The UUID of the project whose documents should be searchable
-        model: The OpenAI model to use (default: "gpt-4o")
+        model: The OpenAI model to use (default: "gpt-4o-mini")
         chat_history: Optional list of previous messages with 'role' and 'content' keys.
                      If provided, the chat history will be included in the system prompt
                      to provide conversation context.

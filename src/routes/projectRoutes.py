@@ -6,6 +6,7 @@ from src.models.index import MessageCreate, MessageRole
 from src.rag.retrieval.index import retrieve_context
 from src.rag.retrieval.utils import prepare_prompt_and_invoke_llm
 from src.agents.simple_agent.agent import create_simple_rag_agent
+from src.agents.supervisor_agent.agent import create_supervisor_agent
 from typing import List, Dict
 
 router = APIRouter(tags=["projectRoutes"])
@@ -480,13 +481,19 @@ async def send_message(
         # Step 3 : Get chat history (excluding current message)
         chat_history = get_chat_history(chat_id, exclude_message_id=current_message_id)
         
-        # Invoke simple agent
-        # Create the agent with chat history context
-        agent = create_simple_rag_agent(
-            project_id=project_id,
-            model="gpt-4o-mini",
-            chat_history=chat_history
-        )
+        # Step 4: Invoke the appropriate agent based on agent_type
+        if agent_type == "simple":
+            agent = create_simple_rag_agent(
+                project_id=project_id,
+                model="gpt-4o-mini",
+                chat_history=chat_history
+            )
+        elif agent_type == "agentic":
+            agent = create_supervisor_agent(
+                project_id=project_id,
+                model="gpt-4o-mini",
+                chat_history=chat_history
+            )
 
         # Invoke the agent with the user's message
         result = agent.invoke({
