@@ -1,0 +1,7 @@
+question,answer,faithfulness,answer_relevancy
+What is the Big Bang theory?,"The Big Bang theory is the prevailing cosmological model that explains the origin of the universe. According to this theory, the universe began approximately 13.8 billion years ago from an extremely hot, dense state and has been expanding ever since. This expansion was first observed by Edwin Hubble in 1929, who discovered that galaxies are moving away from us, with more distant galaxies receding faster.
+
+Evidence supporting the Big Bang includes the cosmic microwave background radiation (CMB), which is the afterglow of the initial explosion, discovered by Arno Penzias and Robert Wilson in 1964. The CMB has a temperature of about 2.7 Kelvin and is remarkably uniform across the sky, with tiny fluctuations that seeded the formation of galaxies.
+
+In the first fraction of a second after the Big Bang, the universe underwent a period of rapid expansion known as cosmic inflation, proposed by Alan Guth in 1980. This theory helps explain why the universe appears so uniform on large scales and addresses several issues with the original Big Bang model.",1.0,0.7569291954716061
+How many neurons does the human brain contain?,The human brain contains approximately 86 billion neurons.,1.0,0.9999995019867088
