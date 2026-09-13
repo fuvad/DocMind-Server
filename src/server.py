@@ -18,6 +18,7 @@ app = FastAPI(
     title="Six-Figure AI Engineering API",
     description="Backend API for Six-Figure AI Engineering application",
     version="1.0.0",
+    redirect_slashes=False,
 )
 
 # Add logging middleware (should be first to capture all requests)
@@ -40,6 +41,14 @@ app.include_router(projectFilesRoutes, prefix="/api/projects")
 app.include_router(chatRoutes, prefix="/api/chats")
 
 logger.info("routes_registered", route_count=4)
+
+@app.get("/")
+async def root():
+    """Root Endpoit"""
+    return {
+        "name": "Docmind API",
+        "status": "running"
+    }
 
 @app.get("/health")
 async def health_check():
