@@ -79,7 +79,7 @@ server/
 
 - Python ≥ 3.10, < 3.14
 - [Poetry](https://python-poetry.org/docs/#installation)
-- Docker & Docker Compose (for Redis)
+- Docker & Docker Compose (for running Redis, FastAPI, and Celery worker)
 - Supabase CLI (for local database & migrations)
 
 ### Installation
