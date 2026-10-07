@@ -39,6 +39,7 @@ embeddings = OpenAIEmbeddings(
 llm = llm_factory(
     "gpt-4o-mini",
     client=client,
+    max_tokens=2048,
 )
 
 faithfulness = Faithfulness(llm=llm)
