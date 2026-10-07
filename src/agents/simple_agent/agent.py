@@ -72,70 +72,14 @@ For every user question:
 """
 
 
-def format_chat_history(chat_history: List[Dict[str, str]]) -> str: 
+def get_system_prompt() -> str:
     """
-    Format chat history into a readable string for the system prompt.
+    Get the system prompt for the RAG agent.
     
-    Args:
-        chat_history: List of message dictionaries with 'role' and 'content' keys
-        
     Returns:
-        Formatted string representation of the chat history
-        
-    Example:
-        >>> history = [
-        ...     {"role": "user", "content": "What is attention?"},
-        ...     {"role": "assistant", "content": "Attention is a mechanism..."}
-        ... ]
-        >>> formatted = format_chat_history(history)
-        >>> print(formatted)
-        User: What is attention?
-        Assistant: Attention is a mechanism...
+        The system prompt string
     """
-    if not chat_history:
-        return ""
-    
-    formatted_messages = []
-    for msg in chat_history:
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")
-        # Format: "User Message: message" or "AI Message: message"
-        role_label = "User Message" if role.lower() == "user" else "AI Message"
-        formatted_messages.append(f"{role_label}: {content}")
-    
-    return "\n\n".join(formatted_messages)
-
-
-def get_system_prompt(chat_history: Optional[List[Dict[str, str]]] = None) -> str:
-    """
-    Get the system prompt for the RAG agent, optionally including chat history.
-    
-    Args:
-        chat_history: Optional list of previous messages with 'role' and 'content' keys.
-                      If provided, the chat history will be included in the system prompt.
-        
-    Returns:
-        The system prompt string, with chat history appended if provided
-        
-    Example:
-        >>> # Without history
-        >>> prompt = get_system_prompt()
-        
-        >>> # With history
-        >>> history = [{"role": "user", "content": "What is X?"}]
-        >>> prompt = get_system_prompt(chat_history=history)
-    """
-    prompt = BASE_SYSTEM_PROMPT
-    
-    if chat_history:
-        formatted_history = format_chat_history(chat_history)
-        if formatted_history:
-            prompt += "\n\n### Previous Conversation Context\n"
-            prompt += "The following is the recent conversation history for context:\n\n"
-            prompt += formatted_history
-            prompt += "\n\nUse this conversation history to understand context and references in the current question."
-    
-    return prompt 
+    return BASE_SYSTEM_PROMPT
 
 
 # =============================================================================
@@ -323,8 +267,7 @@ def should_continue(state: CustomAgentState) -> Literal["agent", "__end__"]:
 
 def create_simple_rag_agent(
     project_id: str,
-    model: str = "gpt-4o-mini",
-    chat_history: Optional[List[Dict[str, str]]] = None
+    model: str = "gpt-4o-mini"
 ):
     """
     Create an agent with input guardrails and RAG tool for a specific project.
@@ -334,7 +277,6 @@ def create_simple_rag_agent(
     - A project-specific RAG search tool
     - Custom state schema for citation tracking
     - A system prompt that enforces RAG-first responses
-    - Optional chat history context in the system prompt
     
     The agent follows this flow:
     START → guardrail → [agent or END]
@@ -342,35 +284,20 @@ def create_simple_rag_agent(
     Args:
         project_id: The UUID of the project whose documents should be searchable
         model: The OpenAI model to use (default: "gpt-4o-mini")
-        chat_history: Optional list of previous messages with 'role' and 'content' keys.
-                     If provided, the chat history will be included in the system prompt
-                     to provide conversation context.
         
     Returns:
         A compiled LangGraph agent that validates input safety and answers 
         questions using the project's documents via RAG
         
     Example:
-        >>> # Basic usage without history
         >>> agent = create_simple_rag_agent(project_id="123e4567-e89b-12d3-a456-426614174000")
         >>> result = agent.invoke({"messages": [{"role": "user", "content": "What is X?"}]})
-        
-        >>> # With chat history
-        >>> history = [
-        ...     {"role": "user", "content": "What is attention?"},
-        ...     {"role": "assistant", "content": "Attention is a mechanism..."}
-        ... ]
-        >>> agent = create_simple_rag_agent(
-        ...     project_id="123e4567-e89b-12d3-a456-426614174000",
-        ...     chat_history=history
-        ... )
-        >>> result = agent.invoke({"messages": [{"role": "user", "content": "Tell me more"}]})
     """
     # Create tools list with project-specific RAG tool
     tools = [create_rag_tool(project_id)]
     
-    # Get the system prompt with optional chat history
-    system_prompt = get_system_prompt(chat_history=chat_history)
+    # Get the system prompt
+    system_prompt = get_system_prompt()
     
     # Create the base agent
     base_agent = create_agent(

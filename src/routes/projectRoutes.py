@@ -553,24 +553,37 @@ async def send_message(
         chat_history = get_chat_history(chat_id, exclude_message_id=current_message_id)
         logger.info("chat_history_retrieved", chat_id=chat_id, history_length=len(chat_history))
 
+        from langchain_core.messages import HumanMessage, AIMessage
+        formatted_messages = []
+        for msg in chat_history:
+            if msg.get("role") == "user":
+                formatted_messages.append(HumanMessage(content=msg.get("content", "")))
+            elif msg.get("role") == "assistant":
+                formatted_messages.append(AIMessage(content=msg.get("content", "")))
+            else:
+                logger.warning(
+                    "unexpected_chat_message_role",
+                    role=msg.get("role"),
+                    message_id=msg.get("id"),
+                )
+        formatted_messages.append(HumanMessage(content=message_content))
+
         # Step 4: Invoke the appropriate agent based on agent_type
         if agent_type == "simple":
             agent = create_simple_rag_agent(
                 project_id=project_id,
-                model="gpt-4o-mini",
-                chat_history=chat_history
+                model="gpt-4o-mini"
             )
         elif agent_type == "agentic":
             agent = create_supervisor_agent(
                 project_id=project_id,
-                model="gpt-4o-mini",
-                chat_history=chat_history
+                model="gpt-4o-mini"
             )
 
         logger.info("invoking_agent", chat_id=chat_id, agent_type=agent_type)
         # Invoke the agent with the user's message
         result = agent.invoke({
-            "messages": [{"role": "user", "content": message_content}]
+            "messages": formatted_messages
         })
 
         # Extract the final response and citations from the result
@@ -665,18 +678,31 @@ async def stream_message(
             chat_history = get_chat_history(chat_id, exclude_message_id=current_message_id)
             logger.info("chat_history_retrieved", chat_id=chat_id, history_length=len(chat_history))  # Added: Chat history log
             
+            from langchain_core.messages import HumanMessage, AIMessage
+            formatted_messages = []
+            for msg in chat_history:
+                if msg.get("role") == "user":
+                    formatted_messages.append(HumanMessage(content=msg.get("content", "")))
+                elif msg.get("role") == "assistant":
+                    formatted_messages.append(AIMessage(content=msg.get("content", "")))
+                else:
+                    logger.warning(
+                        "unexpected_chat_message_role",
+                        role=msg.get("role"),
+                        message_id=msg.get("id"),
+                    )
+            formatted_messages.append(HumanMessage(content=message_content))
+
             # Step 4: Create the appropriate agent
             if agent_type == "simple":
                 agent = create_simple_rag_agent(
                     project_id=project_id,
-                    model="gpt-4o-mini",
-                    chat_history=chat_history
+                    model="gpt-4o-mini"
                 )
             else:  # agentic
                 agent = create_supervisor_agent(
                     project_id=project_id,
-                    model="gpt-4o-mini",
-                    chat_history=chat_history
+                    model="gpt-4o-mini"
                 )
 
             logger.info("invoking_agent", chat_id=chat_id, agent_type=agent_type)
@@ -691,7 +717,7 @@ async def stream_message(
             is_final_response = False
             
             async for event in agent.astream_events(
-                {"messages": [{"role": "user", "content": message_content}]},
+                {"messages": formatted_messages},
                 version="v2"
             ):
                 kind = event["event"]

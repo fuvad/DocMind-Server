@@ -104,58 +104,12 @@ def check_input_guardrails(user_message: str) -> InputGuardrailCheck:
 # PROMPTS
 # =============================================================================
 
-def format_chat_history(chat_history: List[Dict[str, str]]) -> str:
+def get_supervisor_system_prompt() -> str:
     """
-    Format chat history into a readable string for the system prompt.
+    Get the system prompt for the supervisor agent.
     
-    Args:
-        chat_history: List of message dictionaries with 'role' and 'content' keys
-        
     Returns:
-        Formatted string representation of the chat history
-        
-    Example:
-        >>> history = [
-        ...     {"role": "user", "content": "What is attention?"},
-        ...     {"role": "assistant", "content": "Attention is a mechanism..."}
-        ... ]
-        >>> formatted = format_chat_history(history)
-        >>> print(formatted)
-        User Message: What is attention?
-        AI Message: Attention is a mechanism...
-    """
-    if not chat_history:
-        return ""
-    
-    formatted_messages = []
-    for msg in chat_history:
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")
-        # Format: "User Message: message" or "AI Message: message"
-        role_label = "User Message" if role.lower() == "user" else "AI Message"
-        formatted_messages.append(f"{role_label}: {content}")
-    
-    return "\n\n".join(formatted_messages)
-
-
-def get_supervisor_system_prompt(chat_history: Optional[List[Dict[str, str]]] = None) -> str:
-    """
-    Get the system prompt for the supervisor agent, optionally including chat history.
-    
-    Args:
-        chat_history: Optional list of previous messages with 'role' and 'content' keys.
-                      If provided, the chat history will be included in the system prompt.
-        
-    Returns:
-        The system prompt string, with chat history appended if provided
-        
-    Example:
-        >>> # Without history
-        >>> prompt = get_supervisor_system_prompt()
-        
-        >>> # With history
-        >>> history = [{"role": "user", "content": "What is X?"}]
-        >>> prompt = get_supervisor_system_prompt(chat_history=history)
+        The system prompt string
     """
     current_date = datetime.now().strftime("%B %d, %Y")
     
@@ -177,7 +131,6 @@ def get_supervisor_system_prompt(chat_history: Optional[List[Dict[str, str]]] = 
 
 - Analyze the user query and determine which agent(s) to use.
 - You MUST NOT answer substantive factual questions directly.
-- Use the chat history to understand context and references in the current question.
 - Synthesize the results returned by the agents into a coherent answer.
 - Clearly distinguish information obtained from project documents from information obtained from the web.
 
@@ -277,14 +230,6 @@ Direct response permitted ONLY for:
 
 Your role is coordination and synthesis, not direct knowledge provision.
 """
-    
-    if chat_history:
-        formatted_history = format_chat_history(chat_history)
-        if formatted_history:
-            base_prompt += "\n\n### Previous Conversation Context\n"
-            base_prompt += "The following is the recent conversation history for context:\n\n"
-            base_prompt += formatted_history
-            base_prompt += "\n\nUse this conversation history to understand context and references in the current question."
     
     return base_prompt
 
@@ -640,8 +585,7 @@ def should_continue(state: CustomAgentState) -> Literal["supervisor", "__end__"]
 
 def create_supervisor_agent(
     project_id: str,
-    model: str = "gpt-4o-mini",
-    chat_history: Optional[List[Dict[str, str]]] = None
+    model: str = "gpt-4o-mini"
 ):
     """
     Create a supervisor agent with input guardrails that coordinates RAG and web search agents.
@@ -652,7 +596,6 @@ def create_supervisor_agent(
     3. Routing queries to the appropriate specialized agent(s)
     4. Coordinating multiple agents for complex queries
     5. Synthesizing results from multiple agents into coherent answers
-    6. Using chat history to understand context and references
     
     The supervisor has access to two tools:
     - rag_search: For searching project documents
@@ -664,40 +607,21 @@ def create_supervisor_agent(
     Args:
         project_id: The UUID of the project for the RAG agent
         model: The OpenAI model to use (default: "gpt-4o-mini")
-        chat_history: Optional list of previous messages with 'role' and 'content' keys.
-                     If provided, the chat history will be included in the system prompt
-                     to provide conversation context.
         
     Returns:
         A compiled supervisor agent that validates input safety and coordinates sub-agents
         
     Example:
-        >>> # Basic usage without history
         >>> supervisor = create_supervisor_agent("123e4567-e89b-12d3-a456-426614174000")
         >>> result = supervisor.invoke({
         ...     "messages": [{"role": "user", "content": "What does our documentation say about X?"}]
         ... })
-        
-        >>> # With chat history
-        >>> history = [
-        ...     {"role": "user", "content": "What is attention mechanism?"},
-        ...     {"role": "assistant", "content": "Attention is a mechanism that..."}
-        ... ]
-        >>> supervisor = create_supervisor_agent(
-        ...     project_id="123e4567-e89b-12d3-a456-426614174000",
-        ...     chat_history=history
-        ... )
-        >>> result = supervisor.invoke({
-        ...     "messages": [{"role": "user", "content": "Tell me more about it"}]
-        ... })
-        >>> print(result["messages"][-1].content)
-        >>> print(result.get("citations", []))
     """
     # Get the supervisor tools (wrapped agents)
     tools = create_supervisor_tools(project_id, model)
 
-    # Get the system prompt with optional chat history
-    system_prompt = get_supervisor_system_prompt(chat_history=chat_history)
+    # Get the system prompt
+    system_prompt = get_supervisor_system_prompt()
     
     # Create the base supervisor agent
     base_supervisor = create_agent(
