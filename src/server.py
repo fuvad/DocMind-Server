@@ -4,6 +4,7 @@ from src.routes.userRoutes import router as userRoutes
 from src.routes.projectRoutes import router as projectRoutes
 from src.routes.projectFilesRoutes import router as projectFilesRoutes
 from src.routes.chatRoutes import router as chatRoutes
+from src.routes.demoRoutes import router as demoRoutes
 from src.config.logging import configure_logging, get_logger
 from src.middleware.logging_middleware import LoggingMiddleware
 
@@ -39,8 +40,9 @@ app.include_router(userRoutes, prefix="/api/user")
 app.include_router(projectRoutes, prefix="/api/projects")
 app.include_router(projectFilesRoutes, prefix="/api/projects")
 app.include_router(chatRoutes, prefix="/api/chats")
+app.include_router(demoRoutes, prefix="/api/demo")
 
-logger.info("routes_registered", route_count=4)
+logger.info("routes_registered", route_count=5)
 
 @app.get("/")
 async def root():

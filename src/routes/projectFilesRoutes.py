@@ -106,6 +106,23 @@ async def get_upload_presigned_url(
                 status_code=404,
                 detail="Project not found or you don't have permission to upload files to this project",
             )
+            
+        # Resource Limit: 5 documents and 5MB per document for demo users
+        if current_user_clerk_id.startswith("demo:"):
+            # 5MB limit
+            if file_upload_request.file_size > 5 * 1024 * 1024:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Demo users are limited to 5MB per document. Please sign up for larger uploads."
+                )
+                
+            # 5 document limit
+            existing_docs = supabase.table("project_documents").select("id").eq("clerk_id", current_user_clerk_id).execute()
+            if existing_docs.data and len(existing_docs.data) >= 5:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Demo users are limited to 5 documents. Please sign up to upload more documents."
+                )
 
         # Generate s3 key
         file_extension = (
@@ -315,6 +332,15 @@ async def process_url(
                 status_code=400,
                 detail="Invalid URL",
             )
+            
+        # Resource Limit: 5 documents for demo users
+        if current_user_clerk_id.startswith("demo:"):
+            existing_docs = supabase.table("project_documents").select("id").eq("clerk_id", current_user_clerk_id).execute()
+            if existing_docs.data and len(existing_docs.data) >= 5:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Demo users are limited to 5 documents. Please sign up to upload more documents."
+                )
 
         # Add website Url to database
         document_creation_result = (

@@ -46,4 +46,5 @@ appConfig = {
     "redis_url": os.getenv("REDIS_URL"),
     "openai_api_key": os.getenv("OPENAI_API_KEY"),
     "scrapingbee_api_key": os.getenv("SCRAPINGBEE_API_KEY"),
+    "demo_jwt_secret": os.getenv("DEMO_JWT_SECRET", "default_demo_secret_for_local_dev"),
 }

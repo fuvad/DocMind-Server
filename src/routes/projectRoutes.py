@@ -84,6 +84,15 @@ async def create_project(
     """
     set_user_id(current_user_clerk_id)
     try:
+        # Resource Limit: 1 project per demo user
+        if current_user_clerk_id.startswith("demo:"):
+            existing_projects = supabase.table("projects").select("id").eq("clerk_id", current_user_clerk_id).execute()
+            if existing_projects.data and len(existing_projects.data) >= 1:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Demo users are limited to 1 project. Please sign up to create more projects."
+                )
+
         logger.info("creating_project", name=project_data.name)
         # Insert new project into database
         project_insert_data = {
@@ -618,7 +627,7 @@ async def stream_message(
     project_id: str,
     chat_id: str,
     message: MessageCreate,
-    clerk_id: str = Query(..., description="Clerk user ID"),
+    clerk_id: str = Depends(get_current_user_clerk_id),
 ):
     """
     Stream a message response using Server-Sent Events.
