@@ -1,6 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from src.services.supabase import supabase
 from src.config.logging import get_logger
+from src.config.index import appConfig
+import json
+
+try:
+    from svix.webhooks import Webhook, WebhookVerificationError
+except ImportError:
+    Webhook = None
 
 logger = get_logger(__name__)
 
@@ -8,21 +15,52 @@ router = APIRouter(tags=["userRoutes"])
 
 
 @router.post("/create")
-async def create_user(clerk_webhook_data: dict):
+async def create_user(request: Request):
     """
     Payload structure : https://clerk.com/docs/guides/development/webhooks/overview#payload-structure
 
     Logic Flow
-    * 1. Validate webhook payload structure
-    * 2. Check event type - our case type - "user.created"
-    * 3. Extract and validate user data
-    * 4. Extract and validate clerk_id
-    * 5. Check if user already exists to prevent duplicates
-    * 6. Create new user in database
-    * 7. Return success message and user data
+    * 1. Validate webhook signature
+    * 2. Validate webhook payload structure
+    * 3. Check event type - our case type - "user.created"
+    * 4. Extract and validate user data
+    * 5. Extract and validate clerk_id
+    * 6. Check if user already exists to prevent duplicates
+    * 7. Create new user in database
+    * 8. Return success message and user data
 
     """
     try:
+        # Get raw payload and headers for signature verification
+        payload = await request.body()
+        headers = request.headers
+        
+        # Verify webhook signature
+        webhook_secret = appConfig.get("clerk_webhook_secret")
+        if not webhook_secret:
+            logger.error("missing_webhook_secret")
+            raise HTTPException(status_code=500, detail="Server configuration error: Webhook secret missing")
+            
+        if Webhook is None:
+            logger.error("missing_svix_dependency")
+            raise HTTPException(status_code=500, detail="Server configuration error: svix package missing")
+            
+        try:
+            wh = Webhook(webhook_secret)
+            wh.verify(payload, headers)
+        except WebhookVerificationError as e:
+            logger.warning("invalid_webhook_signature", error=str(e))
+            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+        except Exception as e:
+            logger.warning("webhook_verification_failed", error=str(e))
+            raise HTTPException(status_code=400, detail="Webhook verification failed")
+                
+        # Parse JSON body
+        try:
+            clerk_webhook_data = json.loads(payload)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
         logger.info("webhook_received", event_type=clerk_webhook_data.get("type") if isinstance(clerk_webhook_data, dict) else None)
 
         # Validate webhook payload structure

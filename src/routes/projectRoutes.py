@@ -84,14 +84,17 @@ async def create_project(
     """
     set_user_id(current_user_clerk_id)
     try:
-        # Resource Limit: 1 project per demo user
-        if current_user_clerk_id.startswith("demo:"):
-            existing_projects = supabase.table("projects").select("id").eq("clerk_id", current_user_clerk_id).execute()
-            if existing_projects.data and len(existing_projects.data) >= 1:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Demo users are limited to 1 project. Please sign up to create more projects."
-                )
+        # Ensure user exists in database for normal users to prevent foreign key errors
+        if not current_user_clerk_id.startswith("demo:"):
+            user_check = supabase.table("users").select("clerk_id").eq("clerk_id", current_user_clerk_id).execute()
+            if not user_check.data:
+                try:
+                    supabase.table("users").insert({"clerk_id": current_user_clerk_id}).execute()
+                except Exception as e:
+                    logger.warning("db_user_insert_failed", error=str(e))
+                    user_check_again = supabase.table("users").select("clerk_id").eq("clerk_id", current_user_clerk_id).execute()
+                    if not user_check_again.data:
+                        raise HTTPException(status_code=500, detail="Failed to ensure user record exists.")
 
         logger.info("creating_project", name=project_data.name)
         # Insert new project into database

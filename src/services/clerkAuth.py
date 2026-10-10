@@ -9,7 +9,32 @@ from clerk_backend_api.security.types import AuthenticateRequestOptions
 
 
 def get_current_user_clerk_id(request: Request):
-    # Check for demo session cookie first
+    clerk_error = None
+    try:
+        sdk = Clerk(appConfig["clerk_secret_key"])
+        
+        # request_state = JWT Token
+        request_state = sdk.authenticate_request(
+            request,
+            options=AuthenticateRequestOptions(authorized_parties=appConfig["domain"]),
+        )
+        
+        if request_state.is_signed_in:
+            clerk_id = request_state.payload.get("sub")
+            if clerk_id:
+                return clerk_id
+    except Exception as e:
+        clerk_error = str(e)
+
+    # If an Authorization header is present but Clerk authentication failed,
+    # reject immediately without falling back to demo_session.
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        if clerk_error:
+            raise HTTPException(status_code=401, detail=f"Authentication failed: {clerk_error}")
+        raise HTTPException(status_code=401, detail="Invalid or expired Clerk token")
+
+    # If no Authorization header is present, fall back to demo session cookie
     demo_cookie = request.cookies.get("demo_session")
     if demo_cookie:
         try:
@@ -22,29 +47,9 @@ def get_current_user_clerk_id(request: Request):
             if clerk_id and clerk_id.startswith("demo:"):
                 return clerk_id
         except Exception:
-            pass  # Fall through to Clerk if demo cookie is invalid
+            pass  # Demo cookie is invalid
 
-    try:
-        sdk = Clerk(appConfig["clerk_secret_key"])
-
-        # request_state = JWT Token
-        request_state = sdk.authenticate_request(
-            request,
-            options=AuthenticateRequestOptions(authorized_parties=appConfig["domain"]),
-        )
-
-        if not request_state.is_signed_in:
-            raise HTTPException(status_code=401, detail="User is not signed in")
-
-        clerk_id = request_state.payload.get("sub")
-
-        if not clerk_id:
-            raise HTTPException(status_code=401, detail="Clerk ID not found in token")
-
-        return clerk_id
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Clerk SDK Failed. {str(e)}",
-        )
+    # Neither authentication method worked
+    if clerk_error:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {clerk_error}")
+    raise HTTPException(status_code=401, detail="User is not signed in")

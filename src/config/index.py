@@ -38,6 +38,7 @@ appConfig = {
     "supabase_api_url": os.getenv("SUPABASE_API_URL"),
     "supabase_secret_key": os.getenv("SUPABASE_SERVICE_KEY"),
     "clerk_secret_key": os.getenv("CLERK_SECRET_KEY"),
+    "clerk_webhook_secret": os.getenv("CLERK_WEBHOOK_SECRET"),
     "domain": os.getenv("DOMAIN"),
     "s3_bucket_name": os.getenv("S3_BUCKET_NAME"),
     "aws_region": os.getenv("AWS_REGION"),
